@@ -1,0 +1,55 @@
+name: "📝 Documentation Improvement"
+description: "Report missing, incorrect, or outdated documentation"
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+assignees: []
+
+body:
+  - type: dropdown
+    id: doc-location
+    attributes:
+      label: "Documentation Location"
+      options:
+        - "README.md"
+        - "DOCKER.md"
+        - "CONTRIBUTING.md"
+        - "API documentation (Swagger)"
+        - "Code comments / docstrings"
+        - "GitHub wiki"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: "Issue Type"
+      options:
+        - "Missing documentation"
+        - "Incorrect / outdated information"
+        - "Unclear explanation"
+        - "Typo / grammar"
+        - "Broken link"
+        - "Missing code example"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "What needs to be improved?"
+      description: "Describe the documentation issue clearly."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-improvement
+    attributes:
+      label: "Suggested Improvement"
+      description: "How should it be fixed? Provide suggested text if possible."
+
+  - type: input
+    id: doc-url
+    attributes:
+      label: "Link to the documentation"
+      placeholder: "https://github.com/.../blob/main/README.md#section"

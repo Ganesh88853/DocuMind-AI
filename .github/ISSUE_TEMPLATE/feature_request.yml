@@ -1,0 +1,78 @@
+name: "✨ Feature Request"
+description: "Suggest a new feature or enhancement for DocuMind AI"
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to improve DocuMind AI? We'd love to hear it! Fill out the form below.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: "Is there an existing request for this?"
+      options:
+        - label: "I have searched the existing issues"
+          required: true
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: "Feature Area"
+      options:
+        - "Frontend (UI/UX)"
+        - "Backend API"
+        - "AI / Intelligence"
+        - "Document Processing"
+        - "Search"
+        - "Authentication / Security"
+        - "Performance"
+        - "Developer Experience"
+        - "Infrastructure / DevOps"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Estimated Priority"
+      options:
+        - "Nice to have"
+        - "Useful improvement"
+        - "Important for adoption"
+        - "Critical / Blocking"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem / Motivation"
+      description: "What problem does this feature solve? Why is it needed?"
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: "Proposed Solution"
+      description: "Describe the feature you'd like to see."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "What alternatives have you considered?"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: "Additional Context"
+      description: "Mockups, references, or any other relevant information."

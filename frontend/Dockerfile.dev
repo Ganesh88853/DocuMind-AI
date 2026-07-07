@@ -1,0 +1,27 @@
+# =============================================================================
+# DocuMind AI — Frontend Dev Dockerfile
+# Used only by docker-compose.dev.yml for hot-reload development
+# NOT used in production — keeps build fast by not running npm run build
+# =============================================================================
+
+FROM node:22-alpine AS dev
+
+WORKDIR /app
+
+# Install dependencies using package.json
+# node_modules is mounted as a named volume, so this layer installs deps
+# only when the image is rebuilt (package.json changes)
+COPY package.json package-lock.json* ./
+RUN npm ci --frozen-lockfile
+
+# Copy source (will be overridden by bind mount in dev compose)
+COPY . .
+
+EXPOSE 5173
+
+# Healthcheck for the Vite dev server
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD wget -qO- http://localhost:5173 || exit 1
+
+# Vite dev server with HMR — --host required to accept connections inside Docker
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]

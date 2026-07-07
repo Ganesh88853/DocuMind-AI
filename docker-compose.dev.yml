@@ -1,0 +1,94 @@
+# =============================================================================
+# DocuMind AI — Docker Compose Development Overrides
+# =============================================================================
+#
+# Extends docker-compose.yml with developer-friendly settings:
+#   • Source code hot-reload (uvicorn --reload)
+#   • Vite HMR dev server instead of built nginx
+#   • Verbose logging
+#   • Ports exposed for direct access
+#   • Skips expensive image builds where possible
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+#   Or via the convenience script:
+#   ./scripts/start.sh
+# =============================================================================
+
+services:
+
+  # ── Backend: hot reload via uvicorn --reload ──────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+      target:     runtime
+    environment:
+      ENVIRONMENT: development
+      DEBUG:       "true"
+      LOG_LEVEL:   DEBUG
+      # Development CORS — allow Vite dev server
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://localhost:80,http://localhost"
+      SKIP_MIGRATIONS: "false"
+    volumes:
+      # Mount source code for hot reload — changes reflect instantly
+      - ./backend:/app
+      # Prevent host node_modules / venv from overwriting container ones
+      - /app/venv
+      - /app/__pycache__
+      - uploads:/app/uploads
+      - logs:/app/logs
+    ports:
+      # Expose backend directly for API testing / Swagger UI
+      - "8000:8000"
+    # Override production CMD to enable hot reload
+    command: >
+      uvicorn main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app
+        --log-level debug
+
+  # ── Frontend: Vite HMR dev server ────────────────────────────────────────
+  frontend:
+    # Override the production nginx build with a Node dev server
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile.dev
+      target:     dev
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    volumes:
+      # Mount source for HMR
+      - ./frontend:/app
+      # Prevent host node_modules from overwriting container ones
+      - /app/node_modules
+    ports:
+      # Vite dev server port
+      - "5173:5173"
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    # Override healthcheck for dev server
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Nginx: dev mode — no caching, pass-through ────────────────────────────
+  nginx:
+    volumes:
+      - ./docker/nginx.dev.conf:/etc/nginx/conf.d/app.conf:ro
+
+  # ── PostgreSQL: expose for direct DB tooling (TablePlus, pgAdmin etc.) ────
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  # ── Redis: expose for redis-cli / RedisInsight ────────────────────────────
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"

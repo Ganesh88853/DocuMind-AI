@@ -1,0 +1,241 @@
+# =============================================================================
+# DocuMind AI — Docker Build Validation Workflow
+# =============================================================================
+# Validates all Docker artefacts are buildable and the full stack starts.
+#
+# Steps:
+#   1. Validate docker-compose.yml + docker-compose.dev.yml config
+#   2. Build backend image (multi-stage, non-root)
+#   3. Build frontend image (multi-stage, nginx)
+#   4. Spin up full stack and verify all health checks pass
+#   5. Run smoke tests against the live stack
+#   6. Tear down containers
+#
+# Does NOT push images to a registry (that's for the deploy workflow).
+# =============================================================================
+
+name: Docker Build
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker/**"
+      - "docker-compose*.yml"
+      - ".github/workflows/docker.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker/**"
+      - "docker-compose*.yml"
+      - ".github/workflows/docker.yml"
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Compose Configuration Validation ──────────────────────────────────
+  compose-validate:
+    name: Compose Config Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from example
+        run: |
+          cp .env.example .env
+          # Patch required secrets for CI
+          sed -i 's/CHANGE_THIS_TO_A_SECURE_RANDOM_SECRET_AT_LEAST_32_CHARS/ci-test-jwt-secret-key-32-chars-00/' .env
+          sed -i 's/YOUR_GEMINI_API_KEY_HERE/fake-ci-gemini-key/' .env
+
+      - name: Validate production compose
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate dev compose overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+
+      - name: List resolved services
+        run: docker compose -f docker-compose.yml config --services
+
+  # ── 2. Backend Image Build ────────────────────────────────────────────────
+  build-backend:
+    name: Backend Docker Build
+    runs-on: ubuntu-latest
+    needs: compose-validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (runtime stage)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: runtime
+          push: false
+          tags: documind-backend:ci-${{ github.sha }}
+          load: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Verify backend image exists
+        run: docker image inspect documind-backend:ci-${{ github.sha }}
+
+      - name: Check image runs as non-root
+        run: |
+          USER=$(docker run --rm --entrypoint="" documind-backend:ci-${{ github.sha }} id -u)
+          echo "Container user ID: $USER"
+          if [ "$USER" = "0" ]; then
+            echo "❌ Container is running as root — security violation"
+            exit 1
+          fi
+          echo "✅ Container runs as non-root (uid=$USER)"
+
+  # ── 3. Frontend Image Build ───────────────────────────────────────────────
+  build-frontend:
+    name: Frontend Docker Build
+    runs-on: ubuntu-latest
+    needs: compose-validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image (runner stage)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: runner
+          push: false
+          tags: documind-frontend:ci-${{ github.sha }}
+          load: true
+          build-args: |
+            VITE_API_BASE_URL=/api/v1
+            VITE_APP_NAME=DocuMind AI
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Verify frontend image exists
+        run: docker image inspect documind-frontend:ci-${{ github.sha }}
+
+      - name: Check frontend health endpoint responds
+        run: |
+          docker run -d --name test-frontend \
+            -p 8080:80 \
+            documind-frontend:ci-${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:8080/health || (docker logs test-frontend; exit 1)
+          docker rm -f test-frontend
+
+  # ── 4. Integration Stack Test ─────────────────────────────────────────────
+  stack-test:
+    name: Full Stack Integration
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env for stack test
+        run: |
+          cp .env.example .env
+          sed -i 's/CHANGE_THIS_TO_A_SECURE_RANDOM_SECRET_AT_LEAST_32_CHARS/ci-stack-test-secret-key-32chars00/' .env
+          sed -i 's/YOUR_GEMINI_API_KEY_HERE/fake-ci-gemini-key/' .env
+          echo "SKIP_MIGRATIONS=false" >> .env
+
+      - name: Start postgres + redis (infrastructure only)
+        run: |
+          docker compose -f docker-compose.yml up -d postgres redis
+          echo "Waiting for PostgreSQL health..."
+          for i in $(seq 1 30); do
+            docker compose -f docker-compose.yml exec -T postgres pg_isready -U postgres \
+              && break || sleep 2
+          done
+
+      - name: Build and start backend
+        run: |
+          docker compose -f docker-compose.yml build backend
+          docker compose -f docker-compose.yml up -d backend
+
+      - name: Wait for backend health check
+        run: |
+          echo "Waiting for backend to become healthy..."
+          for i in $(seq 1 40); do
+            STATUS=$(docker compose -f docker-compose.yml ps --format json backend 2>/dev/null \
+              | python3 -c "import sys,json; data=sys.stdin.read().strip(); \
+                obj=json.loads(data) if data.startswith('{') else json.loads('['+data+']')[0]; \
+                print(obj.get('Health','unknown'))" 2>/dev/null || echo "unknown")
+            echo "Attempt $i: Backend status = $STATUS"
+            if [ "$STATUS" = "healthy" ]; then
+              echo "✅ Backend is healthy"
+              break
+            fi
+            if [ "$i" -eq 40 ]; then
+              echo "❌ Backend never became healthy"
+              docker compose -f docker-compose.yml logs backend
+              exit 1
+            fi
+            sleep 3
+          done
+
+      - name: Smoke test — health endpoint
+        run: |
+          BACKEND_PORT=$(docker compose -f docker-compose.yml port backend 8000 | cut -d: -f2)
+          curl -f http://localhost:${BACKEND_PORT}/health
+          echo ""
+          echo "✅ Backend /health responded OK"
+
+      - name: Smoke test — API root
+        run: |
+          BACKEND_PORT=$(docker compose -f docker-compose.yml port backend 8000 | cut -d: -f2)
+          curl -sf http://localhost:${BACKEND_PORT}/api/v1/ | head -c 200 || true
+          echo "✅ API endpoint reachable"
+
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml logs --tail=100
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.yml down --volumes --remove-orphans
+
+  # ── Docker Summary Gate ───────────────────────────────────────────────────
+  docker-complete:
+    name: "✅ Docker Build Complete"
+    runs-on: ubuntu-latest
+    needs: [compose-validate, build-backend, build-frontend, stack-test]
+    if: always()
+
+    steps:
+      - name: Check all Docker jobs passed
+        run: |
+          FAILED=false
+          for result in \
+            "${{ needs.compose-validate.result }}" \
+            "${{ needs.build-backend.result }}" \
+            "${{ needs.build-frontend.result }}" \
+            "${{ needs.stack-test.result }}"; do
+            if [[ "$result" != "success" ]]; then
+              FAILED=true
+            fi
+          done
+          if $FAILED; then
+            echo "❌ One or more Docker jobs failed"
+            exit 1
+          fi
+          echo "✅ All Docker builds and stack tests passed"

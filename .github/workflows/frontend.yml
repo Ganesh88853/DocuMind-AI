@@ -1,0 +1,141 @@
+# =============================================================================
+# DocuMind AI — Frontend CI Workflow
+# =============================================================================
+# Triggers: Push to main/develop, all Pull Requests
+#
+# Steps:
+#   1. Install Node.js + npm-cached dependencies
+#   2. TypeScript type checking (tsc --noEmit)
+#   3. ESLint (fail on any error or warning)
+#   4. Prettier format verification
+#   5. Vitest test suite with coverage
+#   6. Production build (Vite)
+#   7. Upload build artifact + coverage report
+# =============================================================================
+
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint + Type check (fast, no build needed) ─────────────────────────────
+  lint-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+
+      - name: TypeScript type check
+        run: npm run type-check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npx prettier --check "src/**/*.{ts,tsx,css,json}"
+
+  # ── Tests ─────────────────────────────────────────────────────────────────
+  tests:
+    name: Vitest Tests + Coverage
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+
+      - name: Run Vitest with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          retention-days: 30
+
+  # ── Production Build ──────────────────────────────────────────────────────
+  build:
+    name: Production Build
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, tests]
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_APP_NAME: "DocuMind AI"
+
+      - name: Check build output size
+        run: |
+          echo "=== Build output ==="
+          du -sh dist/
+          ls -lh dist/assets/ || true
+
+      - name: Upload production build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.sha }}
+          path: frontend/dist/
+          retention-days: 7
+          if-no-files-found: error

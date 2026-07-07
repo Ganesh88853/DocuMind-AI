@@ -1,0 +1,156 @@
+# =============================================================================
+# DocuMind AI — Code Quality Workflow
+# =============================================================================
+# Enforces consistent formatting and static analysis on every PR.
+#
+# Backend checks:
+#   - Black   (auto-formatter — fail if any file would be reformatted)
+#   - isort   (import ordering)
+#   - Flake8  (style + error linting)
+#   - MyPy    (static type checking)
+#
+# Frontend checks:
+#   - ESLint  (JavaScript/TypeScript linting)
+#   - Prettier (format verification)
+#   - oxlint  (fast additional linter, already in devDeps)
+# =============================================================================
+
+name: Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Python Code Quality ──────────────────────────────────────────────────
+  python-quality:
+    name: Python Quality (Black · isort · Flake8 · MyPy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install application dependencies
+        run: pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Install quality tools
+        run: |
+          pip install \
+            black==24.10.0 \
+            isort==5.13.2 \
+            flake8==7.1.1 \
+            flake8-bugbear \
+            flake8-comprehensions \
+            mypy==1.13.0 \
+            types-python-jose \
+            types-passlib \
+            types-Pillow
+
+      # ── Black ────────────────────────────────────────────────────────────
+      - name: Black format check
+        run: black --check --diff --color app/ main.py
+        # Fails if any file would be reformatted by black
+        # To auto-fix locally: black app/ main.py
+
+      # ── isort ────────────────────────────────────────────────────────────
+      - name: isort import order check
+        run: isort --check-only --diff app/ main.py
+        # Fails if imports are not sorted
+        # To auto-fix locally: isort app/ main.py
+
+      # ── Flake8 ───────────────────────────────────────────────────────────
+      - name: Flake8 lint
+        run: |
+          flake8 app/ main.py \
+            --max-line-length=100 \
+            --extend-ignore=E203,W503,E501 \
+            --exclude=__pycache__,migrations,venv,.venv \
+            --format=default
+        # E203: whitespace before ':' (conflicts with Black)
+        # W503: line break before binary operator (conflicts with Black)
+        # E501: line too long (handled by Black)
+
+      # ── MyPy ─────────────────────────────────────────────────────────────
+      - name: MyPy type check
+        run: |
+          mypy app/ main.py \
+            --ignore-missing-imports \
+            --no-strict-optional \
+            --warn-unused-ignores \
+            --show-error-codes \
+            --exclude migrations
+        continue-on-error: true
+        # continue-on-error: MyPy is advisory — does not fail the build yet
+        # Remove this line to enforce strict typing
+
+      - name: MyPy report
+        if: always()
+        run: echo "MyPy check completed (advisory mode)"
+
+  # ── Frontend Code Quality ────────────────────────────────────────────────
+  frontend-quality:
+    name: Frontend Quality (ESLint · Prettier · oxlint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npx prettier --check "src/**/*.{ts,tsx,css,json}"
+
+      - name: oxlint (fast additional linter)
+        run: npx oxlint src/
+        continue-on-error: true
+        # oxlint is advisory for now — catches additional issues
+
+  # ── Quality Summary ──────────────────────────────────────────────────────
+  quality-complete:
+    name: "✅ Quality Complete"
+    runs-on: ubuntu-latest
+    needs: [python-quality, frontend-quality]
+    if: always()
+
+    steps:
+      - name: Verify all quality checks passed
+        run: |
+          if [[ "${{ needs.python-quality.result }}" != "success" ]]; then
+            echo "❌ Python quality checks failed (Black/isort/Flake8)"
+            exit 1
+          fi
+          if [[ "${{ needs.frontend-quality.result }}" != "success" ]]; then
+            echo "❌ Frontend quality checks failed (ESLint/Prettier)"
+            exit 1
+          fi
+          echo "✅ All code quality checks passed"

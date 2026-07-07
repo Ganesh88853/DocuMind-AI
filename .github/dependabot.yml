@@ -1,0 +1,106 @@
+# =============================================================================
+# DocuMind AI — Dependabot Configuration
+# =============================================================================
+# Automatically opens PRs to update dependencies on a weekly schedule.
+# PRs are small and focused (one package at a time where possible).
+#
+# Covered ecosystems:
+#   - pip       (backend/requirements.txt)
+#   - npm       (frontend/package.json)
+#   - github-actions (.github/workflows/*.yml)
+# =============================================================================
+
+version: 2
+
+updates:
+  # ── Python dependencies ───────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+      - "automated"
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      # Group minor and patch updates for common packages
+      fastapi-ecosystem:
+        patterns:
+          - "fastapi"
+          - "uvicorn*"
+          - "starlette"
+          - "pydantic*"
+      sqlalchemy-ecosystem:
+        patterns:
+          - "sqlalchemy"
+          - "alembic"
+          - "asyncpg"
+          - "psycopg2*"
+      testing:
+        patterns:
+          - "pytest*"
+          - "httpx"
+          - "anyio"
+    ignore:
+      # Ignore major version bumps — handle manually
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ── Node.js dependencies ──────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "automated"
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "vitest*"
+          - "@vitest/*"
+      vite-ecosystem:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+      types:
+        patterns:
+          - "@types/*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci(deps)"

@@ -1,0 +1,41 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--no-header",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+]
+markers = [
+    "unit: fast isolated unit tests",
+    "integration: tests requiring the database",
+    "security: security-focused tests",
+    "slow: tests that take >1 second",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/migrations/*",
+    "*/venv/*",
+    "*/__pycache__/*",
+    "*/tests/*",
+    "app/core/logging.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1

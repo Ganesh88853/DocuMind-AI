@@ -1,0 +1,44 @@
+# =============================================================================
+# DocuMind AI — CODEOWNERS
+# =============================================================================
+# Defines code reviewers for different parts of the repository.
+# When a PR modifies a file matching a pattern, the listed owners are
+# automatically requested as reviewers.
+#
+# Syntax:  <pattern>   <owner1> <owner2> ...
+# Owners can be GitHub usernames (@user), teams (@org/team), or emails.
+# Last matching rule wins.
+# =============================================================================
+
+# Default owner for everything (fallback)
+*                           @your-username
+
+# ── Backend ─────────────────────────────────────────────────────────────────
+/backend/                   @your-username
+/backend/app/               @your-username
+/backend/migrations/        @your-username
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+/frontend/                  @your-username
+/frontend/src/              @your-username
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+/docker/                    @your-username
+/docker-compose*.yml        @your-username
+/backend/Dockerfile         @your-username
+/frontend/Dockerfile        @your-username
+
+# ── CI/CD ─────────────────────────────────────────────────────────────────────
+/.github/                   @your-username
+/.github/workflows/         @your-username
+
+# ── Security ──────────────────────────────────────────────────────────────────
+/backend/app/middleware/    @your-username
+/backend/app/core/          @your-username
+SECURITY.md                 @your-username
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+README.md                   @your-username
+DOCKER.md                   @your-username
+CONTRIBUTING.md             @your-username
+CHANGELOG.md                @your-username

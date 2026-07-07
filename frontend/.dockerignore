@@ -1,0 +1,45 @@
+# DocuMind AI frontend .dockerignore
+# Excludes files from build context for faster Docker builds
+
+# Dependencies — installed fresh in the image
+node_modules/
+.pnp
+.pnp.js
+
+# Build output — built inside image
+dist/
+build/
+
+# Test artifacts
+coverage/
+.vitest/
+
+# Development
+.vite/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs/
+
+# Type checking cache
+tsconfig.tsbuildinfo

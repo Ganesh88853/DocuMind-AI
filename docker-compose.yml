@@ -1,0 +1,180 @@
+# =============================================================================
+# DocuMind AI — Docker Compose (Production)
+# =============================================================================
+#
+# Services:  postgres · redis · backend · frontend · nginx
+# Networks:  documind-net (internal bridge)
+# Volumes:   postgres_data · redis_data · uploads · logs
+#
+# Usage:
+#   Production:   docker compose up -d
+#   Development:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Environment:
+#   Copy .env.example → .env and fill in all required values before starting.
+# =============================================================================
+
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: documind-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB:-documind_ai}
+      PGDATA:            /var/lib/postgresql/data/pgdata
+    volumes:
+      # Persistent data volume — survives container restarts and rebuilds
+      - postgres_data:/var/lib/postgresql/data
+      # Initialization script — creates documind_test DB on first start
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      # Only expose to host for local debugging (remove in cloud deployments)
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - documind-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-documind_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis 7 ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: documind-redis
+    restart: unless-stopped
+    command: redis-server /etc/redis/redis.conf
+    volumes:
+      - redis_data:/data
+      - ./docker/redis/redis.conf:/etc/redis/redis.conf:ro
+    ports:
+      # Only exposed for local debugging
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - documind-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── FastAPI Backend ───────────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+      target:     runtime          # use the production runtime stage
+    image: documind-backend:latest
+    container_name: documind-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override DATABASE_URL to point to postgres container (not localhost)
+      DATABASE_URL:  postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-documind_ai}
+      REDIS_URL:     redis://redis:6379/0
+      ENVIRONMENT:   ${ENVIRONMENT:-production}
+      DEBUG:         ${DEBUG:-false}
+      LOG_LEVEL:     ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS:  ${CORS_ORIGINS:-http://localhost,http://localhost:80}
+    volumes:
+      # Uploads persist across container restarts
+      - uploads:/app/uploads
+      # Application logs
+      - logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - documind-net
+    # Not exposing 8000 to host — nginx handles all external traffic
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # ── React Frontend (nginx serving static build) ───────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+      target:     runner           # use the nginx production stage
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_APP_NAME: "DocuMind AI"
+    image: documind-frontend:latest
+    container_name: documind-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - documind-net
+    # Not exposing 80 directly — nginx reverse proxy handles it
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────────────────────────
+  # Single entry point for all external traffic
+  # Routes: /* → frontend, /api/* → backend
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: documind-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/app.conf:ro
+      # Shared uploads so nginx can serve files directly if needed
+      - uploads:/app/uploads:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - documind-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# ── Named Volumes ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: documind_postgres_data
+    driver: local
+  redis_data:
+    name: documind_redis_data
+    driver: local
+  uploads:
+    name: documind_uploads
+    driver: local
+  logs:
+    name: documind_logs
+    driver: local
+
+# ── Named Networks ────────────────────────────────────────────────────────────
+networks:
+  documind-net:
+    name: documind-network
+    driver: bridge

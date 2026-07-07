@@ -1,0 +1,68 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+env/
+venv/
+ENV/
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ─── Node / Frontend ──────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# ─── Environment files (NEVER commit secrets) ─────────────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+.env.testing
+# Keep *.example files (safe templates — no real secrets)
+!.env.example
+!**/.env.*.example
+!**/.env.development    # Safe — contains only placeholder values
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# .dockerignore files should be committed — they're part of the build config
+# No Docker-specific files to ignore here
+
+# ─── IDE / Editors ────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Uploads ──────────────────────────────────────────────────────────────────
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ─── Migrations (keep structure, not generated files) ─────────────────────────
+# backend/migrations/versions/*.py  # Uncomment to ignore migration versions
+
+# ─── Coverage / Testing ───────────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover

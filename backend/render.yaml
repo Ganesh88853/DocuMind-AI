@@ -1,0 +1,101 @@
+# =============================================================================
+# DocuMind AI — Render Blueprint
+# =============================================================================
+# This file defines the Render services for the backend.
+# Deploy by connecting this repo to Render and selecting "Blueprint".
+# Render reads this file and auto-creates all services.
+#
+# Docs: https://render.com/docs/blueprint-spec
+# =============================================================================
+
+services:
+  # ── FastAPI Backend Web Service ─────────────────────────────────────────────
+  - type: web
+    name: documind-backend
+    runtime: python
+    region: oregon          # US West — change to: singapore, frankfurt, ohio
+    plan: free              # Upgrade to "starter" ($7/mo) for always-on
+    branch: main
+
+    # ── Build ──────────────────────────────────────────────────────────────
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      echo "Build complete"
+
+    # ── Startup ────────────────────────────────────────────────────────────
+    # 1. Apply database migrations (idempotent — safe to run on every deploy)
+    # 2. Start uvicorn with graceful shutdown support
+    startCommand: |
+      alembic upgrade head && \
+      uvicorn main:app \
+        --host 0.0.0.0 \
+        --port $PORT \
+        --workers 2 \
+        --timeout-keep-alive 30 \
+        --timeout-graceful-shutdown 30 \
+        --log-level info \
+        --access-log
+
+    # ── Health Check ───────────────────────────────────────────────────────
+    healthCheckPath: /health
+
+    # ── Root Directory ─────────────────────────────────────────────────────
+    rootDir: backend
+
+    # ── Environment Variables ─────────────────────────────────────────────
+    # Non-secret values only — set secrets via Render Dashboard or sync
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+
+      - key: DEBUG
+        value: "false"
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      - key: BCRYPT_ROUNDS
+        value: "12"
+
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "50"
+
+      - key: JWT_ALGORITHM
+        value: HS256
+
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "15"
+
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
+
+      - key: STORAGE_BACKEND
+        value: supabase
+
+      - key: SUPABASE_STORAGE_BUCKET
+        value: documind-uploads
+
+      # ── Secrets — set these in Render Dashboard, NOT here ────────────────
+      # DATABASE_URL          → Supabase Transaction Pooler URL
+      # JWT_SECRET_KEY        → python -c "import secrets; print(secrets.token_hex(32))"
+      # GEMINI_API_KEY        → https://aistudio.google.com/app/apikey
+      # SUPABASE_URL          → https://xxx.supabase.co
+      # SUPABASE_SERVICE_KEY  → Supabase service role key
+      # CORS_ORIGINS          → https://your-app.vercel.app
+      # SMTP_PASSWORD         → Your email provider API key
+
+    # ── Auto Deploy ────────────────────────────────────────────────────────
+    autoDeploy: true       # Redeploy on every push to main
+
+    # ── Disk (for local storage fallback — not recommended for production) ─
+    # Render free tier does NOT include persistent disk. If STORAGE_BACKEND=local,
+    # uploaded files will be lost on each deploy. Use STORAGE_BACKEND=supabase.
+    # Uncomment to add a persistent disk (paid plans only):
+    # disk:
+    #   name: uploads
+    #   mountPath: /opt/render/project/src/uploads
+    #   sizeGB: 1
