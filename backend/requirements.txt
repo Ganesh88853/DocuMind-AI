@@ -18,7 +18,7 @@ bcrypt==4.2.1
 # OCR (Milestone 4)
 PyPDF2==3.0.1
 python-docx==1.2.0
-Pillow==12.2.0
+Pillow==12.3.0
 pytesseract==0.3.13
 # AI (Milestone 5)
 google-genai==2.10.0
