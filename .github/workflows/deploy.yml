@@ -74,7 +74,7 @@ jobs:
         working-directory: backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -110,7 +110,7 @@ jobs:
       url: ${{ vars.BACKEND_URL }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Trigger Render deploy
         # Render exposes a deploy hook URL — add it as a GitHub secret
@@ -161,7 +161,7 @@ jobs:
     if: vars.BACKEND_URL != ''
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run smoke tests
         run: |
