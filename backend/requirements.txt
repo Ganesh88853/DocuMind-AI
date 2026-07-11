@@ -32,5 +32,5 @@ pytest==8.3.4
 pytest-asyncio==0.24.0
 # Security (Milestone 9)
 slowapi==0.1.9
-prometheus-client==0.21.1
+prometheus-client==0.25.0
 user-agents==2.2.0
