@@ -25,7 +25,10 @@ from app.models.user import User  # noqa: F401 — required for metadata detecti
 config = context.config
 
 # Override the sqlalchemy.url from alembic.ini with the live settings value
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL.replace("%", "%%")
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
